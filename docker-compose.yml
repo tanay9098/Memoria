@@ -1,0 +1,16 @@
+# Local FalkorDB for Memoria. `docker compose up -d` then `npm run seed`.
+# falkordb/falkordb includes the FalkorDB Browser on :3000 (handy for inspecting the graph).
+services:
+  falkordb:
+    image: falkordb/falkordb:latest
+    container_name: memoria-falkordb
+    ports:
+      - "6379:6379"
+      - "3001:3000"   # FalkorDB Browser (3000 is used by the Next.js app)
+    environment:
+      - REDIS_ARGS=--appendonly yes
+    volumes:
+      - falkordb_data:/var/lib/falkordb/data
+    restart: unless-stopped
+volumes:
+  falkordb_data:
