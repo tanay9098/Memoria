@@ -15,16 +15,38 @@ export class GraphUnavailableError extends Error {
 }
 
 const g = globalThis as unknown as {
-  __memoriaPool?: Promise<FalkorDB>[];
+  __memoriaPool?: (Promise<FalkorDB> | undefined)[];
   __memoriaNext?: number;
   __memoriaSchema?: Promise<void>;
 };
 
-function connect(): Promise<FalkorDB> {
-  return FalkorDB.connect({
-    socket: { host: config.falkor.host, port: config.falkor.port },
+async function connect(): Promise<FalkorDB> {
+  const c = await FalkorDB.connect({
+    // Fail fast instead of retrying forever, so the UI can show a clear "FalkorDB unreachable" error.
+    socket: {
+      host: config.falkor.host, port: config.falkor.port, connectTimeout: 3000,
+      reconnectStrategy: (retries: number) => (retries >= 2 ? new Error("connection retries exhausted") : 200),
+    } as any,
     password: config.falkor.password,
   });
+  // An unhandled 'error' event would crash the process when the DB goes away; failures surface per query instead.
+  c.on("error", () => undefined);
+  return c;
+}
+
+const CONNECTION_ERROR = /ECONNREFUSED|ECONNRESET|EPIPE|ETIMEDOUT|ENOTFOUND|closed|Socket|Connection|retries exhausted|NR_CLOSED|Reconnect/i;
+
+/** Drop pooled connections (they reconnect lazily on the next call) and surface a clear error. */
+async function failConnection(e: unknown): Promise<never> {
+  if (e instanceof GraphUnavailableError) throw e;
+  if (CONNECTION_ERROR.test((e as Error)?.message ?? "")) {
+    const pool = g.__memoriaPool ?? [];
+    g.__memoriaPool = undefined;
+    g.__memoriaSchema = undefined;
+    pool.forEach((p) => p?.then((c) => c.close()).catch(() => undefined));
+    throw new GraphUnavailableError(e);
+  }
+  throw e;
 }
 
 /**
@@ -32,22 +54,16 @@ function connect(): Promise<FalkorDB> {
  * FalkorDB in parallel, which is what the concurrency test relies on.
  */
 export function client(): Promise<FalkorDB> {
-  if (!g.__memoriaPool) {
-    g.__memoriaPool = Array.from({ length: config.falkor.pool }, (_, i) =>
-      connect().catch((e) => {
-        if (g.__memoriaPool) g.__memoriaPool[i] = undefined as any; // allow reconnect on next call
-        throw new GraphUnavailableError(e);
-      }),
-    );
-    g.__memoriaNext = 0;
+  const pool = (g.__memoriaPool ??= new Array(config.falkor.pool).fill(undefined));
+  const i = (g.__memoriaNext = ((g.__memoriaNext ?? -1) + 1) % pool.length);
+  if (!pool[i]) {
+    // Slots connect lazily, one per call, so a refused connection is always awaited by its caller.
+    pool[i] = connect().catch((e) => {
+      pool[i] = undefined;
+      throw new GraphUnavailableError(e);
+    });
   }
-  const i = (g.__memoriaNext = ((g.__memoriaNext ?? 0) + 1) % g.__memoriaPool.length);
-  const slot = g.__memoriaPool[i];
-  if (!slot) {
-    g.__memoriaPool[i] = connect().catch((e) => { g.__memoriaPool![i] = undefined as any; throw new GraphUnavailableError(e); });
-    return g.__memoriaPool[i];
-  }
-  return slot;
+  return pool[i]!;
 }
 
 export async function closeAll() {
@@ -71,18 +87,22 @@ export async function graphOn(c: FalkorDB) {
 
 /** Run a (parameterized) write/read query. Rows are plain objects keyed by RETURN alias. */
 export async function q<T = Row>(cypher: string, params: Params = {}): Promise<T[]> {
-  await ensureSchema();
-  const c = await client();
-  const res = await c.selectGraph(config.falkor.graph).query<T>(cypher, { params: params as any });
-  return (res.data ?? []) as T[];
+  try {
+    await ensureSchema();
+    const c = await client();
+    const res = await c.selectGraph(config.falkor.graph).query<T>(cypher, { params: params as any });
+    return (res.data ?? []) as T[];
+  } catch (e) { return failConnection(e); }
 }
 
 /** Read-only variant (GRAPH.RO_QUERY) — the server rejects any write. */
 export async function ro<T = Row>(cypher: string, params: Params = {}): Promise<T[]> {
-  await ensureSchema();
-  const c = await client();
-  const res = await c.selectGraph(config.falkor.graph).roQuery<T>(cypher, { params: params as any });
-  return (res.data ?? []) as T[];
+  try {
+    await ensureSchema();
+    const c = await client();
+    const res = await c.selectGraph(config.falkor.graph).roQuery<T>(cypher, { params: params as any });
+    return (res.data ?? []) as T[];
+  } catch (e) { return failConnection(e); }
 }
 
 export async function qOn<T = Row>(c: FalkorDB, cypher: string, params: Params = {}): Promise<T[]> {

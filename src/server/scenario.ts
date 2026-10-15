@@ -33,7 +33,7 @@ export const ROUND_TITLES: Record<number, string> = {
   2: "Unsecured big deal (D-2)",
   3: "Scripted event: Trader fails to deliver",
   4: "Recovery plan: Farmer → Mayor → Trader",
-  5: "New session: related negotiation",
+  5: "Related negotiation (new session)",
 };
 
 // ------------------------------------------------------------------ session handling

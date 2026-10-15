@@ -9,10 +9,12 @@
     "start": "next start",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "seed": "tsx scripts/seed.ts",
-    "eval": "tsx scripts/eval.ts",
-    "concurrency": "tsx scripts/concurrency.ts",
-    "mcp": "tsx mcp/server.ts"
+    "seed": "tsx --env-file-if-exists=.env scripts/seed.ts",
+    "eval": "tsx --env-file-if-exists=.env scripts/eval.ts",
+    "concurrency": "tsx --env-file-if-exists=.env scripts/concurrency.ts",
+    "mcp": "tsx --env-file-if-exists=.env mcp/server.ts",
+    "e2e": "tsx scripts/e2e.mts",
+    "db:up": "docker compose up -d"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.134.0",
@@ -30,10 +32,14 @@
     "@types/node": "^26.6.5",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
+    "playwright-core": "^1.64.1",
     "postcss": "^8.5.30",
     "tailwindcss": "^4.3.3",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
     "vitest": "^5.0.4"
+  },
+  "engines": {
+    "node": ">=22.9"
   }
 }
