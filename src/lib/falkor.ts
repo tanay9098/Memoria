@@ -87,22 +87,46 @@ export async function graphOn(c: FalkorDB) {
 
 /** Run a (parameterized) write/read query. Rows are plain objects keyed by RETURN alias. */
 export async function q<T = Row>(cypher: string, params: Params = {}): Promise<T[]> {
-  try {
+  return withRetry(async () => {
     await ensureSchema();
     const c = await client();
     const res = await c.selectGraph(config.falkor.graph).query<T>(cypher, { params: params as any });
     return (res.data ?? []) as T[];
-  } catch (e) { return failConnection(e); }
+  });
+}
+
+/**
+ * Retry once, and only when the failure proves the command was never sent (connection refused / client
+ * already closed — e.g. a pooled socket that died while the DB restarted). Mid-flight errors are NOT
+ * retried, because a write might have been applied.
+ */
+async function withRetry<T>(fn: () => Promise<T>): Promise<T> {
+  try {
+    return await fn();
+  } catch (e) {
+    if (/ECONNREFUSED|client is closed|ClientClosed/i.test((e as Error)?.message ?? "")) {
+      await resetPool();
+      try { return await fn(); } catch (e2) { return failConnection(e2); }
+    }
+    return failConnection(e);
+  }
+}
+
+async function resetPool() {
+  const pool = g.__memoriaPool ?? [];
+  g.__memoriaPool = undefined;
+  g.__memoriaSchema = undefined;
+  pool.forEach((p) => p?.then((c) => c.close()).catch(() => undefined));
 }
 
 /** Read-only variant (GRAPH.RO_QUERY) — the server rejects any write. */
 export async function ro<T = Row>(cypher: string, params: Params = {}): Promise<T[]> {
-  try {
+  return withRetry(async () => {
     await ensureSchema();
     const c = await client();
     const res = await c.selectGraph(config.falkor.graph).roQuery<T>(cypher, { params: params as any });
     return (res.data ?? []) as T[];
-  } catch (e) { return failConnection(e); }
+  });
 }
 
 export async function qOn<T = Row>(c: FalkorDB, cypher: string, params: Params = {}): Promise<T[]> {
