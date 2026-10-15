@@ -5,6 +5,7 @@ export const config = {
     port: Number(process.env.FALKORDB_PORT ?? 6379),
     password: process.env.FALKORDB_PASSWORD || undefined,
     graph: process.env.FALKORDB_GRAPH ?? "memoria",
+    pool: Number(process.env.FALKORDB_POOL ?? 4),
   },
   llm: {
     apiKey: process.env.ANTHROPIC_API_KEY || undefined,

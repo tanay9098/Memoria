@@ -65,7 +65,7 @@ const farmerOpts = (o: RunOpts): RunOpts => o;
 async function round1(sim: string, o: RunOpts) {
   const d = await decideProposal(sim, "farmer", "trader", { res: "food", qty: 4 }, { res: "wood", qty: 4 }, 2, { ...o, memoryEnabled: true }, "r1:farmer:propose", "Small trade to start rebuilding the wood stock");
   await sleep(o.pace);
-  const dec = await decideOffer(sim, "trader", d, { ...o, memoryEnabled: true }, "r1:trader:respond");
+  const dec = await decideOffer(sim, "trader", d, { ...o, memoryEnabled: true, llm: null }, "r1:trader:respond");
   const r = await applyOfferDecision(sim, "trader", d, dec, "r1:trader:respond");
   if (r.deal.state === "accepted") await executeDeal(sim, d.id, { pace: o.pace });
   await settle(sim, ["farmer", "trader"], "Completed D-1 with the Trader");
@@ -73,7 +73,7 @@ async function round1(sim: string, o: RunOpts) {
 
 async function round2(sim: string, o: RunOpts) {
   const d = await decideProposal(sim, "farmer", "trader", { res: "food", qty: 12 }, { res: "wood", qty: 8 }, 3, { ...o, memoryEnabled: true }, "r2:farmer:propose", "Large wood order, payment up front");
-  const dec = await decideOffer(sim, "trader", d, { ...o, memoryEnabled: true }, "r2:trader:respond");
+  const dec = await decideOffer(sim, "trader", d, { ...o, memoryEnabled: true, llm: null }, "r2:trader:respond");
   const r = await applyOfferDecision(sim, "trader", d, dec, "r2:trader:respond");
   if (r.deal.state !== "accepted") throw new ValidationError(`Scenario expected the Trader to accept ${d.id}, got ${r.deal.state}`);
   // The Farmer pays up front (unsecured). The Trader's wood is due in round 3.
@@ -192,7 +192,7 @@ async function round5(sim: string, o: RunOpts, sc: ScenarioConfig) {
   let live = r.counter ?? r.deal;
   if (r.counter) {
     // The Trader answers the Farmer's counter-offer with the same deterministic rule as always.
-    const tdec = await decideOffer(sim, "trader", r.counter, { ...o, memoryEnabled: true }, "r5:trader:respond");
+    const tdec = await decideOffer(sim, "trader", r.counter, { ...o, memoryEnabled: true, llm: null }, "r5:trader:respond");
     const tr = await applyOfferDecision(sim, "trader", r.counter, tdec, "r5:trader:respond");
     live = tr.deal;
   }

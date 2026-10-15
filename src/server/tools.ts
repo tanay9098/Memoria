@@ -42,40 +42,40 @@ async function guarded<T>(simId: string, tool: string, actor: string, key: strin
 }
 
 export const tools = {
-  get_world_state: (a: z.input<typeof toolSchemas.get_world_state>) => getWorldState(toolSchemas.get_world_state.parse(a).sim),
+  get_world_state: async (a: z.input<typeof toolSchemas.get_world_state>) => getWorldState(toolSchemas.get_world_state.parse(a).sim),
 
-  get_agent_memories: (a: z.input<typeof toolSchemas.get_agent_memories>) => {
+  get_agent_memories: async (a: z.input<typeof toolSchemas.get_agent_memories>) => {
     const p = toolSchemas.get_agent_memories.parse(a);
     return getAgentMemories(p.sim, p.agent, { about: p.about, kinds: p.kinds, limit: p.limit });
   },
 
-  find_related_events: (a: z.input<typeof toolSchemas.find_related_events>) => {
+  find_related_events: async (a: z.input<typeof toolSchemas.find_related_events>) => {
     const p = toolSchemas.find_related_events.parse(a);
     return findRelatedEvents(p.sim, { dealId: p.dealId, agent: p.agent, limit: p.limit });
   },
 
-  propose_deal: (a: z.input<typeof toolSchemas.propose_deal>) => {
+  propose_deal: async (a: z.input<typeof toolSchemas.propose_deal>) => {
     const p = toolSchemas.propose_deal.parse(a);
     return guarded(p.sim, "propose_deal", p.actor, p.idemKey, () => proposeDeal(p.sim, p.actor, p.terms, p.idemKey));
   },
 
-  respond_to_deal: (a: z.input<typeof toolSchemas.respond_to_deal>) => {
+  respond_to_deal: async (a: z.input<typeof toolSchemas.respond_to_deal>) => {
     const p = toolSchemas.respond_to_deal.parse(a);
     return guarded(p.sim, "respond_to_deal", p.actor, p.idemKey, () => respondToDeal(p.sim, p.actor, p.dealId, p.response, p.idemKey));
   },
 
-  request_agent_handoff: (a: z.input<typeof toolSchemas.request_agent_handoff>) => {
+  request_agent_handoff: async (a: z.input<typeof toolSchemas.request_agent_handoff>) => {
     const p = toolSchemas.request_agent_handoff.parse(a);
     return guarded(p.sim, "request_agent_handoff", p.actor, p.idemKey, () =>
       requestHandoff(p.sim, p.actor, { from: p.from, to: p.to, kind: p.kind, payload: p.payload, dependsOn: p.dependsOn, idemKey: p.idemKey }));
   },
 
-  execute_validated_action: (a: z.input<typeof toolSchemas.execute_validated_action>) => {
+  execute_validated_action: async (a: z.input<typeof toolSchemas.execute_validated_action>) => {
     const p = toolSchemas.execute_validated_action.parse(a);
     return guarded(p.sim, "execute_validated_action", p.actor, p.action.idemKey, () => executeValidatedAction(p.sim, p.actor, p.action));
   },
 
-  record_outcome_and_memory: (a: z.input<typeof toolSchemas.record_outcome_and_memory>) => {
+  record_outcome_and_memory: async (a: z.input<typeof toolSchemas.record_outcome_and_memory>) => {
     const p = toolSchemas.record_outcome_and_memory.parse(a);
     return guarded(p.sim, "record_outcome_and_memory", "system", `${p.dealId}:${p.result}`, () => recordOutcomeAndMemory(p.sim, p));
   },

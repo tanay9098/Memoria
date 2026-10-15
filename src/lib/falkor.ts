@@ -15,7 +15,8 @@ export class GraphUnavailableError extends Error {
 }
 
 const g = globalThis as unknown as {
-  __memoriaClient?: Promise<FalkorDB>;
+  __memoriaPool?: Promise<FalkorDB>[];
+  __memoriaNext?: number;
   __memoriaSchema?: Promise<void>;
 };
 
@@ -26,15 +27,33 @@ function connect(): Promise<FalkorDB> {
   });
 }
 
-/** Shared client (one connection, reused across requests / hot reloads). */
+/**
+ * Small connection pool (round-robin). Separate sockets mean concurrent requests really reach
+ * FalkorDB in parallel, which is what the concurrency test relies on.
+ */
 export function client(): Promise<FalkorDB> {
-  if (!g.__memoriaClient) {
-    g.__memoriaClient = connect().catch((e) => {
-      g.__memoriaClient = undefined;
-      throw new GraphUnavailableError(e);
-    });
+  if (!g.__memoriaPool) {
+    g.__memoriaPool = Array.from({ length: config.falkor.pool }, (_, i) =>
+      connect().catch((e) => {
+        if (g.__memoriaPool) g.__memoriaPool[i] = undefined as any; // allow reconnect on next call
+        throw new GraphUnavailableError(e);
+      }),
+    );
+    g.__memoriaNext = 0;
   }
-  return g.__memoriaClient;
+  const i = (g.__memoriaNext = ((g.__memoriaNext ?? 0) + 1) % g.__memoriaPool.length);
+  const slot = g.__memoriaPool[i];
+  if (!slot) {
+    g.__memoriaPool[i] = connect().catch((e) => { g.__memoriaPool![i] = undefined as any; throw new GraphUnavailableError(e); });
+    return g.__memoriaPool[i];
+  }
+  return slot;
+}
+
+export async function closeAll() {
+  const pool = g.__memoriaPool ?? [];
+  g.__memoriaPool = undefined;
+  await Promise.all(pool.map((p) => p?.then((c) => c.close()).catch(() => undefined)));
 }
 
 /** A dedicated connection (used by the concurrency test to get truly parallel sockets). */
@@ -73,7 +92,7 @@ export async function qOn<T = Row>(c: FalkorDB, cypher: string, params: Params =
 
 export const LABELS = [
   "Simulation", "Agent", "Resource", "Deal", "Event", "Memory", "Knowledge",
-  "Procedure", "Task", "Evidence", "Decision", "Session", "Revision",
+  "Procedure", "Task", "Evidence", "Decision", "Session", "Revision", "EvalRun",
 ] as const;
 
 /**
